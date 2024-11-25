@@ -7,10 +7,10 @@ class AudioEngine: ObservableObject {
     private var inputNode: AVAudioInputNode
     private let sampleRate: Double = 44100
     private let bufferSize: AVAudioFrameCount = 4096
-    private let fftSize: Int = 4096
+    private let fftSize: Int = 8192
     
     // Minimum loudness to be shown in app, found based on empirical testing
-    private let magnitudeThreshold: Float = 10000
+    private let magnitudeThreshold: Float = 5000
     
     // Published properties for UI updates
     @Published var currentFrequency: Float? = nil
@@ -115,6 +115,11 @@ class AudioEngine: ObservableObject {
             realIn[i] = channelData[i]
         }
         
+        // Apply Hanning window to reduce spectral leakage
+        var window = [Float](repeating: 0, count: fftSize)
+        vDSP_hann_window(&window, vDSP_Length(fftSize), Int32(vDSP_HANN_NORM))
+        vDSP_vmul(realIn, 1, window, 1, &realIn, 1, vDSP_Length(fftSize))
+        
         // Create FFT setup
         let log2n = vDSP_Length(log2(Float(fftSize)))
         guard let fftSetup = vDSP_create_fftsetup(log2n, FFTRadix(kFFTRadix2)) else { return }
@@ -133,26 +138,71 @@ class AudioEngine: ObservableObject {
         var magnitudes = [Float](repeating: 0, count: fftSize/2)
         vDSP_zvmags(&splitComplex, 1, &magnitudes, 1, vDSP_Length(fftSize/2))
         
-        // Find peak frequency
+        // Early exit: Check if we have any significant magnitude
         var maxMagnitude: Float = 0
         var maxIndex: vDSP_Length = 0
-        vDSP_maxvi(magnitudes, 1, &maxMagnitude, &maxIndex, vDSP_Length(fftSize/2))
+        vDSP_maxvi(magnitudes, 1, &maxMagnitude, &maxIndex, vDSP_Length(magnitudes.count))
         
-        // Only process frequencies with significant magnitude
+        guard maxMagnitude > magnitudeThreshold else {
+            DispatchQueue.main.async { [weak self] in
+                self?.updateWithFrequency(nil)  // No significant sound detected
+            }
+            vDSP_destroy_fftsetup(fftSetup)
+            return
+        }
+        
         let peakFrequency = Float(maxIndex) * Float(sampleRate) / Float(fftSize)
-        print("Max Magnitude: \(maxMagnitude), Peak Frequency: \(peakFrequency)")
         
-        // Update on main thread
-        let magThreshold = magnitudeThreshold
-        DispatchQueue.main.async { [weak self] in
-            if maxMagnitude > magThreshold {
-                self?.updateWithFrequency(peakFrequency)
-            } else {
-                self?.updateWithFrequency(nil)
+        // Define frequency range for guitar (E2 to E6)
+        let minFreq: Float = 65.0   // Slightly below lowest guitar string (E2 = 82.41 Hz)
+        let maxFreq: Float = 1000.0 // Well above highest guitar frequencies
+        let minBin = Int(minFreq * Float(fftSize) / Float(sampleRate))
+        let maxBin = Int(maxFreq * Float(fftSize) / Float(sampleRate))
+        
+        // Find the lowest significant peak
+        var foundFrequency: Float? = nil
+        var peakMagnitude: Float = magnitudeThreshold
+        
+        // Scan through the frequency bins
+        for bin in minBin...maxBin {
+            let magnitude = magnitudes[bin]
+            
+            // Check if this bin is a peak and above our threshold
+            if magnitude > peakMagnitude {
+                // Verify it's a local maximum
+                if (bin == minBin || magnitudes[bin-1] < magnitude) &&
+                   (bin == maxBin || magnitudes[bin+1] < magnitude) {
+                    foundFrequency = interpolateFrequency(magnitudes: magnitudes, peakBin: bin)
+                    print("Max Magnitude: \(maxMagnitude), Peak Frequency: \(peakFrequency), Found mag: \(magnitude), Found freq: \(foundFrequency)")
+                    break  // Stop at first significant peak (fundamental)
+                }
             }
         }
         
+        // Clean up FFT resources
         vDSP_destroy_fftsetup(fftSetup)
+        
+        // Update on main thread
+        DispatchQueue.main.async { [weak self] in
+            self?.updateWithFrequency(foundFrequency)
+        }
+    }
+    
+    // After finding the peak bin, interpolate using neighboring bins
+    private func interpolateFrequency(magnitudes: [Float], peakBin: Int) -> Float {
+        guard peakBin > 0 && peakBin < magnitudes.count - 1 else {
+            return Float(peakBin) * Float(sampleRate) / Float(fftSize)
+        }
+        
+        let alpha = magnitudes[peakBin-1]
+        let beta = magnitudes[peakBin]
+        let gamma = magnitudes[peakBin+1]
+        
+        // Quadratic interpolation
+        let p = 0.5 * (alpha - gamma) / (alpha - 2*beta + gamma)
+        let interpolatedBin = Float(peakBin) + p
+        
+        return interpolatedBin * Float(sampleRate) / Float(fftSize)
     }
     
     private func updateWithFrequency(_ frequency: Float?) {
