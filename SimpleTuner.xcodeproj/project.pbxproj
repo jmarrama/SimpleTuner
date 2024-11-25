@@ -30,7 +30,7 @@
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
-		D59B7FEF2CF4EA62002EB015 /* Exceptions for "SimpleTuner" folder in "SimpleTuner" target */ = {
+		D59B7FF12CF4FD38002EB015 /* Exceptions for "SimpleTuner" folder in "SimpleTuner" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
 				Info.plist,
@@ -43,7 +43,7 @@
 		D59B7FBC2CF4DAC9002EB015 /* SimpleTuner */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			exceptions = (
-				D59B7FEF2CF4EA62002EB015 /* Exceptions for "SimpleTuner" folder in "SimpleTuner" target */,
+				D59B7FF12CF4FD38002EB015 /* Exceptions for "SimpleTuner" folder in "SimpleTuner" target */,
 			);
 			path = SimpleTuner;
 			sourceTree = "<group>";
@@ -409,8 +409,11 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_ASSET_PATHS = "\"SimpleTuner/Preview Content\"";
+				DEVELOPMENT_TEAM = 274YH67586;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = SimpleTuner/Info.plist;
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "We need mic access to detect pitch of musical instruments";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -437,8 +440,11 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_ASSET_PATHS = "\"SimpleTuner/Preview Content\"";
+				DEVELOPMENT_TEAM = 274YH67586;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = SimpleTuner/Info.plist;
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "We need mic access to detect pitch of musical instruments";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;

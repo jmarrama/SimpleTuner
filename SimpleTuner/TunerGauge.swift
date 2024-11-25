@@ -23,11 +23,12 @@ struct TunerGauge: View {
                         AngularGradient(
                             gradient: gradient,
                             center: .center,
-                            startAngle: .degrees(180),
-                            endAngle: .degrees(0)
+                            startAngle: .degrees(0),
+                            endAngle: .degrees(360)
                         ),
                         style: StrokeStyle(lineWidth: 20, lineCap: .round)
                     )
+                    .rotationEffect(.degrees(90))
                 
                 // Needle
                 Rectangle()
@@ -43,8 +44,10 @@ struct TunerGauge: View {
                     .frame(width: 20, height: 20)
                     .shadow(radius: 2)
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .aspectRatio(2, contentMode: .fit)
-        .padding()
+        .frame(maxWidth: .infinity)
+        .padding(.horizontal)
     }
 }

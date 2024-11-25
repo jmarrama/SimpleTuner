@@ -12,14 +12,15 @@ struct ContentView: View {
     
     var body: some View {
         VStack(spacing: 30) {
-            Text("\(String(format: "%.1f", audioEngine.currentFrequency)) Hz")
-                .font(.system(size: 50, weight: .light, design: .rounded))
             
             Text(audioEngine.closestNote.name)
                 .font(.system(size: 70, weight: .regular, design: .rounded))
             
             TunerGauge(cents: audioEngine.cents)
                 .frame(height: 200)
+            
+            Text("\(String(format: "%.1f", audioEngine.currentFrequency)) Hz")
+                .font(.system(size: 50, weight: .light, design: .rounded))
         }
         .padding()
         .onAppear {

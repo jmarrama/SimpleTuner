@@ -13,45 +13,88 @@ class AudioEngine: ObservableObject {
     @Published var currentFrequency: Float = 0.0
     @Published var closestNote: Note = Note(name: "A", frequency: 440.0)
     @Published var cents: Float = 0.0
+    @Published var isRunning: Bool = false
+    @Published var errorMessage: String?
+    
+    // Device status
+    private var isSimulator: Bool {
+        #if targetEnvironment(simulator)
+        return true
+        #else
+        return false
+        #endif
+    }
     
     init() {
         audioEngine = AVAudioEngine()
         inputNode = audioEngine.inputNode
         setupAudioSession()
-        setupEngine()
     }
     
     private func setupAudioSession() {
         do {
             let session = AVAudioSession.sharedInstance()
-            try session.setPreferredSampleRate(sampleRate)
-            try session.setPreferredIOBufferDuration(Double(bufferSize) / sampleRate)
+            
+            // Request microphone permission first
+            try AVAudioSession.sharedInstance().requestRecordPermission { granted in
+                DispatchQueue.main.async {
+                    if !granted {
+                        self.handleError(AudioEngineError.noInputAvailable)
+                    }
+                }
+            }
+            
+            // Check if we have audio input available
+            guard session.availableInputs?.isEmpty == false else {
+                throw AudioEngineError.noInputAvailable
+            }
+            
             try session.setCategory(.playAndRecord, mode: .default, options: [.defaultToSpeaker, .allowBluetoothA2DP])
             try session.setActive(true, options: .notifyOthersOnDeactivation)
+            
+            // Only set these if we successfully activated the session
+            try session.setPreferredSampleRate(sampleRate)
+            try session.setPreferredIOBufferDuration(Double(bufferSize) / sampleRate)
+            
+        } catch let error as AudioEngineError {
+            handleError(error)
         } catch {
-            print("Failed to set up audio session: \(error.localizedDescription)")
+            handleError(.setupFailed(error))
         }
     }
     
-    private func setupEngine() {
+    private func setupEngine() throws {
+        // Check if we're in simulator and handle appropriately
+        guard !isSimulator else {
+            throw AudioEngineError.simulatorUnsupported
+        }
+        
         do {
-            let inputFormat = inputNode.inputFormat(forBus: 0)
+            // Ensure the engine is stopped before configuring
+            audioEngine.stop()
+            inputNode.removeTap(onBus: 0)
+            
+            guard let inputFormat = try? inputNode.inputFormat(forBus: 0) else {
+                throw AudioEngineError.invalidFormat
+            }
+            
             let processingFormat = AVAudioFormat(commonFormat: .pcmFormatFloat32,
                                                sampleRate: sampleRate,
                                                channels: 1,
                                                interleaved: false)!
-            
-            // Remove any existing taps
-            inputNode.removeTap(onBus: 0)
             
             inputNode.installTap(onBus: 0, bufferSize: bufferSize, format: inputFormat) { [weak self] buffer, time in
                 guard let self = self else { return }
                 self.processAudioBuffer(buffer)
             }
             
+            audioEngine.prepare()
             try audioEngine.start()
+            isRunning = true
+            errorMessage = nil
+            
         } catch {
-            print("Error setting up audio engine: \(error.localizedDescription)")
+            throw AudioEngineError.setupFailed(error)
         }
     }
     
@@ -65,7 +108,7 @@ class AudioEngine: ObservableObject {
         var imagOut = [Float](repeating: 0, count: fftSize/2)
         
         // Copy audio data to real input array
-        for i in 0..<Int(buffer.frameLength) {
+        for i in 0..<min(Int(buffer.frameLength), fftSize) {
             realIn[i] = channelData[i]
         }
         
@@ -110,14 +153,44 @@ class AudioEngine: ObservableObject {
     }
     
     func start() {
-        if !audioEngine.isRunning {
-            setupAudioSession()
-            setupEngine()
+        do {
+            try setupEngine()
+        } catch {
+            handleError(error as? AudioEngineError ?? .setupFailed(error))
         }
     }
     
     func stop() {
         audioEngine.stop()
         inputNode.removeTap(onBus: 0)
+        isRunning = false
+    }
+    
+    private func handleError(_ error: AudioEngineError) {
+        DispatchQueue.main.async { [weak self] in
+            self?.isRunning = false
+            self?.errorMessage = error.localizedDescription
+        }
+    }
+}
+
+// Custom error enum for better error handling
+enum AudioEngineError: LocalizedError {
+    case simulatorUnsupported
+    case noInputAvailable
+    case invalidFormat
+    case setupFailed(Error)
+    
+    var errorDescription: String? {
+        switch self {
+        case .simulatorUnsupported:
+            return "Audio input is not supported in the iOS Simulator. Please test on a physical device."
+        case .noInputAvailable:
+            return "No audio input device available. Please check microphone permissions."
+        case .invalidFormat:
+            return "Failed to get valid audio format from input device."
+        case .setupFailed(let error):
+            return "Audio engine setup failed: \(error.localizedDescription)"
+        }
     }
 }
