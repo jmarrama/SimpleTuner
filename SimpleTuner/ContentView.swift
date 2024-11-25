@@ -15,12 +15,20 @@ struct ContentView: View {
             
             Text(audioEngine.closestNote.name)
                 .font(.system(size: 70, weight: .regular, design: .rounded))
+                .opacity(audioEngine.currentFrequency != nil ? 1 : 0.3)
             
             TunerGauge(cents: audioEngine.cents)
                 .frame(height: 200)
+                .opacity(audioEngine.currentFrequency != nil ? 1 : 0.3)
             
-            Text("\(String(format: "%.1f", audioEngine.currentFrequency)) Hz")
-                .font(.system(size: 50, weight: .light, design: .rounded))
+            if let frequency = audioEngine.currentFrequency {
+                Text("\(String(format: "%.1f", frequency)) Hz")
+                    .font(.system(size: 50, weight: .light, design: .rounded))
+            } else {
+                Text("Play a note")
+                    .font(.system(size: 50, weight: .light, design: .rounded))
+                    .foregroundColor(.secondary)
+            }
         }
         .padding()
         .onAppear {

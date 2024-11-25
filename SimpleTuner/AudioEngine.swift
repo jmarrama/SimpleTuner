@@ -9,8 +9,11 @@ class AudioEngine: ObservableObject {
     private let bufferSize: AVAudioFrameCount = 4096
     private let fftSize: Int = 4096
     
+    // Minimum loudness to be shown in app, found based on empirical testing
+    private let magnitudeThreshold: Float = 10000
+    
     // Published properties for UI updates
-    @Published var currentFrequency: Float = 0.0
+    @Published var currentFrequency: Float? = nil
     @Published var closestNote: Note = Note(name: "A", frequency: 440.0)
     @Published var cents: Float = 0.0
     @Published var isRunning: Bool = false
@@ -135,21 +138,34 @@ class AudioEngine: ObservableObject {
         var maxIndex: vDSP_Length = 0
         vDSP_maxvi(magnitudes, 1, &maxMagnitude, &maxIndex, vDSP_Length(fftSize/2))
         
+        // Only process frequencies with significant magnitude
         let peakFrequency = Float(maxIndex) * Float(sampleRate) / Float(fftSize)
+        print("Max Magnitude: \(maxMagnitude), Peak Frequency: \(peakFrequency)")
         
         // Update on main thread
+        let magThreshold = magnitudeThreshold
         DispatchQueue.main.async { [weak self] in
-            self?.updateWithFrequency(peakFrequency)
+            if maxMagnitude > magThreshold {
+                self?.updateWithFrequency(peakFrequency)
+            } else {
+                self?.updateWithFrequency(nil)
+            }
         }
         
         vDSP_destroy_fftsetup(fftSetup)
     }
     
-    private func updateWithFrequency(_ frequency: Float) {
+    private func updateWithFrequency(_ frequency: Float?) {
         self.currentFrequency = frequency
-        let (note, cents) = findClosestNote(frequency: frequency)
-        self.closestNote = note
-        self.cents = cents
+        if let freq = frequency {
+            let (note, cents) = findClosestNote(frequency: freq)
+            self.closestNote = note
+            self.cents = cents
+        } else {
+            // Reset the note display when no frequency is detected
+            self.closestNote = Note(name: "", frequency: 0.0)
+            self.cents = 0
+        }
     }
     
     func start() {
