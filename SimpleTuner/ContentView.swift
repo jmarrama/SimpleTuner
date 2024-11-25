@@ -13,9 +13,14 @@ struct ContentView: View {
     var body: some View {
         VStack(spacing: 30) {
             
-            Text(audioEngine.closestNote.name)
-                .font(.system(size: 70, weight: .regular, design: .rounded))
-                .opacity(audioEngine.currentFrequency != nil ? 1 : 0.3)
+            HStack(spacing: 10) {
+                Text(audioEngine.closestNote.name)
+                    .font(.system(size: 70, weight: .bold, design: .rounded))
+                Text("(\(String(format: "%.1f", audioEngine.closestNote.frequency)) Hz)")
+                    .font(.system(size: 24, weight: .regular, design: .rounded))
+                    .foregroundColor(.secondary)
+            }
+            .opacity(audioEngine.currentFrequency != nil ? 1 : 0.3)
             
             TunerGauge(cents: audioEngine.cents)
                 .frame(height: 200)

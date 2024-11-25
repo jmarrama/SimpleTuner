@@ -5,12 +5,20 @@ import Accelerate
 class AudioEngine: ObservableObject {
     private var audioEngine: AVAudioEngine
     private var inputNode: AVAudioInputNode
-    private let sampleRate: Double = 44100
-    private let bufferSize: AVAudioFrameCount = 4096
+    
+    // Get about 1hz per bin of the FFT! Also, this gets us almost up to C8!
+    private let sampleRate: Double = 8192
+    private let bufferSize: AVAudioFrameCount = 8192
     private let fftSize: Int = 8192
     
     // Minimum loudness to be shown in app, found based on empirical testing
-    private let magnitudeThreshold: Float = 5000
+    private let decibelThreshold: Float = 25
+
+    // Calculate magnitude threshold from dB threshold
+    // Since dB = 20 * log10(magnitude), then magnitude = 10^(dB/20)
+    private lazy var magnitudeThreshold: Float = {
+        return pow(10, decibelThreshold / 20.0)
+    }()
     
     // Published properties for UI updates
     @Published var currentFrequency: Float? = nil
@@ -55,8 +63,8 @@ class AudioEngine: ObservableObject {
             try session.setCategory(.playAndRecord, mode: .default, options: [.defaultToSpeaker, .allowBluetoothA2DP])
             try session.setActive(true, options: .notifyOthersOnDeactivation)
             
-            // Only set these if we successfully activated the session
-            try session.setPreferredSampleRate(sampleRate)
+            // Set our lower sample rate
+            try session.setPreferredSampleRate(sampleRate)  // Now 8000 Hz
             try session.setPreferredIOBufferDuration(Double(bufferSize) / sampleRate)
             
         } catch let error as AudioEngineError {
@@ -67,28 +75,54 @@ class AudioEngine: ObservableObject {
     }
     
     private func setupEngine() throws {
-        // Check if we're in simulator and handle appropriately
         guard !isSimulator else {
             throw AudioEngineError.simulatorUnsupported
         }
         
         do {
-            // Ensure the engine is stopped before configuring
             audioEngine.stop()
             inputNode.removeTap(onBus: 0)
             
-            guard let inputFormat = try? inputNode.inputFormat(forBus: 0) else {
+            // Get the hardware input format
+            guard let hardwareFormat = try? inputNode.inputFormat(forBus: 0) else {
                 throw AudioEngineError.invalidFormat
             }
             
+            // Create our desired output format at 8000 Hz
             let processingFormat = AVAudioFormat(commonFormat: .pcmFormatFloat32,
                                                sampleRate: sampleRate,
                                                channels: 1,
                                                interleaved: false)!
             
-            inputNode.installTap(onBus: 0, bufferSize: bufferSize, format: inputFormat) { [weak self] buffer, time in
+            // Create a format converter
+            let formatConverter = AVAudioConverter(from: hardwareFormat, to: processingFormat)
+            
+            // Install tap using hardware format
+            inputNode.installTap(onBus: 0, bufferSize: bufferSize, format: hardwareFormat) { [weak self] buffer, time in
                 guard let self = self else { return }
-                self.processAudioBuffer(buffer)
+                
+                // Create an output buffer in our desired format
+                guard let convertedBuffer = AVAudioPCMBuffer(pcmFormat: processingFormat,
+                                                           frameCapacity: AVAudioFrameCount(Double(buffer.frameLength) * processingFormat.sampleRate / hardwareFormat.sampleRate)) else {
+                    return
+                }
+                
+                var error: NSError?
+                
+                // Convert the buffer
+                let inputBlock: AVAudioConverterInputBlock = { inNumPackets, outStatus in
+                    outStatus.pointee = AVAudioConverterInputStatus.haveData
+                    return buffer
+                }
+                
+                formatConverter!.convert(to: convertedBuffer,
+                                     error: &error,
+                                     withInputFrom: inputBlock)
+                
+                if error == nil {
+                    // Process the converted buffer
+                    self.processAudioBuffer(convertedBuffer)
+                }
             }
             
             audioEngine.prepare()
@@ -142,6 +176,7 @@ class AudioEngine: ObservableObject {
         var maxMagnitude: Float = 0
         var maxIndex: vDSP_Length = 0
         vDSP_maxvi(magnitudes, 1, &maxMagnitude, &maxIndex, vDSP_Length(magnitudes.count))
+        let peakFrequency = Float(maxIndex) * Float(sampleRate) / Float(fftSize)
         
         guard maxMagnitude > magnitudeThreshold else {
             DispatchQueue.main.async { [weak self] in
@@ -150,9 +185,7 @@ class AudioEngine: ObservableObject {
             vDSP_destroy_fftsetup(fftSetup)
             return
         }
-        
-        let peakFrequency = Float(maxIndex) * Float(sampleRate) / Float(fftSize)
-        
+                
         // Define frequency range for guitar (E2 to E6)
         let minFreq: Float = 65.0   // Slightly below lowest guitar string (E2 = 82.41 Hz)
         let maxFreq: Float = 1000.0 // Well above highest guitar frequencies
@@ -173,7 +206,7 @@ class AudioEngine: ObservableObject {
                 if (bin == minBin || magnitudes[bin-1] < magnitude) &&
                    (bin == maxBin || magnitudes[bin+1] < magnitude) {
                     foundFrequency = interpolateFrequency(magnitudes: magnitudes, peakBin: bin)
-                    print("Max Magnitude: \(maxMagnitude), Peak Frequency: \(peakFrequency), Found mag: \(magnitude), Found freq: \(foundFrequency)")
+                    // print("Max Magnitude: \(maxMagnitude), Peak Frequency: \(peakFrequency), Found mag: \(magnitude), Found freq: \(foundFrequency)")
                     break  // Stop at first significant peak (fundamental)
                 }
             }
