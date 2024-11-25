@@ -29,9 +29,22 @@
 		D59B7FD42CF4DACA002EB015 /* SimpleTunerUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = SimpleTunerUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		D59B7FEF2CF4EA62002EB015 /* Exceptions for "SimpleTuner" folder in "SimpleTuner" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = D59B7FB92CF4DAC9002EB015 /* SimpleTuner */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		D59B7FBC2CF4DAC9002EB015 /* SimpleTuner */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				D59B7FEF2CF4EA62002EB015 /* Exceptions for "SimpleTuner" folder in "SimpleTuner" target */,
+			);
 			path = SimpleTuner;
 			sourceTree = "<group>";
 		};
